@@ -4,8 +4,8 @@ namespace OTP.Services
 {
     public interface IOtpService
     {
-        OtpGetResponse getOtp(OtpGetRequest request);
+        OtpGetResponse GetOtp(OtpGetRequest request);
 
-        OtpCheckResponse checkOtp(OtpCheckRequest request);
+        OtpCheckResponse CheckOtp(OtpCheckRequest request);
     }
 }

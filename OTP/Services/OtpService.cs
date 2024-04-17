@@ -1,55 +1,67 @@
 ﻿using Microsoft.Extensions.Caching.Memory;
 using OTP.Models;
 using OTP.Services.DTO;
+using OTP.Services.Exceptions;
 using System.Security.Cryptography;
 
 namespace OTP.Services
 {
     public class OtpService : IOtpService
     {
-        private static Dictionary<string, Otp> _otps = new Dictionary<string, Otp>() { };
         private readonly IMemoryCache _otpcache;
-        private int _optLength = 6;
-        private int _validTime = 60;
+        private readonly int _optLength = 6;
+        private readonly int _validTime = 60;
+        private readonly int _min;
+        private readonly int _max;
 
-        public OtpService(IMemoryCache otpcache)
+        public OtpService(IMemoryCache otpcache, IConfiguration configuration)
         {
             _otpcache = otpcache;
+            _optLength = configuration.GetValue<int>("OtpLength");
+            _validTime = configuration.GetValue<int>("OtpValidTime");
+            _min = (int)Math.Pow(10, _optLength - 1);
+            _max = (int)Math.Pow(10, _optLength) - 1;
         }
 
         private string generateRandomNumber()
         {
-            var min = (int)Math.Pow(10, _optLength - 1);
-            var max = (int)Math.Pow(10, _optLength) - 1;
-            return RandomNumberGenerator.GetInt32(min, max).ToString();
+
+            return RandomNumberGenerator.GetInt32(_min, _max).ToString();
         }
 
-        private Otp generateOtp(string email)
+        private Otp generateOtp()
         {
             return new Otp(generateRandomNumber(), DateTime.UtcNow.AddSeconds(_validTime));
         }
 
-        public OtpGetResponse getOtp(OtpGetRequest request)
+        public OtpGetResponse GetOtp(OtpGetRequest request)
         {
-            if(request.Email == null || request.Email == "") 
+            
+            if(string.IsNullOrEmpty(request.Email))
             {
-                throw new Exception("Invalid Email");
+                throw new EmailException("Invalid Email");
             }
-            var otp = generateOtp(request.Email);
+            var otp = generateOtp();
             _otpcache.Set(request.Email, otp, otp.Expiry);
             return new OtpGetResponse(otp.Code, otp.Expiry);
         }
 
-        public OtpCheckResponse checkOtp(OtpCheckRequest request)
+        public OtpCheckResponse CheckOtp(OtpCheckRequest request) //litera mare CheckOtp
         {
-            if (_otpcache.TryGetValue(request.Email, out _)){
-                var otp = _otpcache.Get(request.Email) as Otp;
-                if (otp.Code == request.Code)
+            if (string.IsNullOrEmpty(request.Email))
+            {
+                throw new EmailException("Invalid Email");
+            }
+
+            if (_otpcache.TryGetValue(request.Email, out Otp? otp)){
+                if (otp is not null && otp.Code == request.Code)
                 {
+                    _otpcache.Remove(request.Email);
                     return new OtpCheckResponse(true);
                 }
             }
-            throw new Exception("OTP is not valid");
+
+            throw new OtpException("OTP is not valid");
         }
     }
 }
